@@ -1,0 +1,50 @@
+from django.db import models
+
+from pygments.lexers import get_all_lexers, get_lexer_by_name
+from pygments.styles import get_all_styles
+from pygments.formatters.html import HtmlFormatter
+from pygments import highlight
+
+LEXERS = [item for item in get_all_lexers() if item[1]]
+LANGUAGE_CHOICES = sorted([(item[1][0], item[0]) for item in LEXERS])
+STYLE_CHOICES = sorted((item, item) for item in get_all_styles())
+
+class Snippet(models.Model):
+    created = models.DateField(auto_now_add=True)
+    title = models.CharField(blank=True, max_length=100, default='')
+    code = models.TextField()
+    linenos = models.BooleanField(default=False)
+    language = models.CharField(choices=LANGUAGE_CHOICES,
+                                max_length=100,
+                                default='python')
+    style = models.CharField(choices=STYLE_CHOICES,
+                             max_length=100,
+                             default='friendly')
+    # Added in v4_0 and further
+    # The user that have introduced the snippet in the DB
+    owner = models.ForeignKey('auth.User', related_name='snippets')
+    # The HTML highlight representation of the code
+    highlighted = models.TextField()
+
+    class Meta:
+        # verbose_name = 'Snippet'          # No idea about this
+        # verbose_name_plural = 'Snippets'  # No idea about this
+        ordering = ('created',)
+
+    def __unicode__(self):
+        return unicode("%s ['%s']"% (self.title, self.language))
+    
+    def save(self, *args, **kwargs):
+        """
+        Use the `pygments` library to create a highlighted HTML
+        representation of the code snippet.
+        """
+        lexer = get_lexer_by_name(self.language)
+        linenos = self.linenos and 'table' or False
+        options = self.title and {'title': self.title} or {}
+        formatter = HtmlFormatter(style=self.style,
+                                  linenos=linenos,
+                                  full=True,
+                                  **options)
+        self.highlighted = highlight(self.code, lexer, formatter)
+        super(Snippet, self).save(*args, **kwargs)
